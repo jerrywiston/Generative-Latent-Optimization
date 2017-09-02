@@ -58,13 +58,19 @@ latent_size = 100
 batch_size = 128
 
 #Placeholder
-Z_one_hot = tf.placeholder(tf.float32, shape=[None, samp_size])
-Z_samp = tf.placeholder(tf.float32, shape=[None, latent_size])
-X_in = tf.placeholder(tf.float32, shape=[None,784])
+k_ = tf.placeholder(tf.float32, shape=[None, samp_size])
+z_ = tf.placeholder(tf.float32, shape=[None, latent_size])
+x_ = tf.placeholder(tf.float32, shape=[None,784])
 
 #Model Variable
-W_latent = tf.Variable(xavier_init([samp_size, latent_size]))
-b_latent = tf.Variable(tf.zeros(shape=[latent_size]))
+W_e1 = tf.Variable(xavier_init([samp_size, 256]))
+b_e1 = tf.Variable(tf.zeros(shape=[256]))
+W_e2 = tf.Variable(xavier_init([256, 128]))
+b_e2 = tf.Variable(tf.zeros(shape=[128]))
+W_e3_mu = tf.Variable(xavier_init([128, latent_size]))
+b_e3_mu = tf.Variable(tf.zeros(shape=[latent_size]))
+W_e3_sigma = tf.Variable(xavier_init([128, latent_size]))
+b_e3_sigma = tf.Variable(tf.zeros(shape=[latent_size]))
 
 W_g1 = tf.Variable(xavier_init([latent_size,10]))
 b_g1 = tf.Variable(tf.zeros(shape=[10]))
@@ -74,27 +80,35 @@ W_g3 = tf.Variable(xavier_init([128,784]))
 b_g3 = tf.Variable(tf.zeros(shape=[784]))
 
 #Model Implement
-def OneHotEncoder(Z_o):
-    #Z_latent = tf.nn.tanh(tf.matmul(Z_o,W_latent) + b_latent, name='latent')
-    Z_latent = tf.matmul(Z_o,W_latent)
-    Z_latent_normal = tf.nn.l2_normalize(Z_latent, dim=1, epsilon=1, name=None)
-    return Z_latent_normal
+def OneHotEncoder(k):
+    h_e1 = tf.nn.relu(tf.matmul(k, W_e1) + b_e1)
+    h_e2 = tf.nn.relu(tf.matmul(h_e1, W_e2) + b_e2)
+    z_mu = tf.matmul(h_e2, W_e3_mu) + b_e3_mu
+    z_logvar = tf.matmul(h_e2, W_e3_sigma) + b_e3_sigma
+    return z_mu, z_logvar
 
-def Generator(Z_l):
-    h_g1 = tf.nn.relu(tf.matmul(Z_l, W_g1) + b_g1)
+def Generator(z):
+    h_g1 = tf.nn.relu(tf.matmul(z, W_g1) + b_g1)
     h_g2 = tf.nn.relu(tf.matmul(h_g1, W_g2) + b_g2)
-    X_re = tf.nn.relu(tf.matmul(h_g2, W_g3) + b_g3)
-    return X_re
+    x_logits = tf.matmul(h_g2, W_g3) + b_g3
+    x_prob = tf.nn.sigmoid(x_logits)
+    return x_prob, x_logits
 
-Z_latent = OneHotEncoder(Z_one_hot)
-GLO_re = Generator(Z_latent)
-GLO_samp = Generator(Z_samp)
+def sample_z(mu, log_var):
+    eps = tf.random_normal(shape=tf.shape(mu))
+    return mu + tf.exp(log_var / 2) * eps
 
-
+z_mu, z_logvar = OneHotEncoder(k_)
+z_sample = sample_z(z_mu, z_logvar)
+_, x_logits = Generator(z_sample)
+x_sample, _ = Generator(z_)
 
 #Loss and optimizer
-loss = tf.reduce_mean(tf.reduce_sum(tf.square(GLO_re - X_in), reduction_indices=[1]))
-train = tf.train.AdamOptimizer().minimize(loss)
+recon_loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logits, labels=x_), 1)
+kl_loss = 0.5 * tf.reduce_sum(tf.exp(z_logvar) + z_mu**2 - 1. - z_logvar, 1)
+loss = tf.reduce_mean(recon_loss + kl_loss)
+
+solver = tf.train.AdamOptimizer().minimize(loss)
 
 #Build model
 sess = tf.Session()
@@ -107,7 +121,8 @@ if not os.path.exists('out/'):
 i=0
 for it in range(100000):
     if it % 1000 == 0:
-        samples = sess.run(GLO_samp, feed_dict={Z_samp: sample_Z(16, latent_size)})
+        samples = sess.run(x_sample, feed_dict={z_: np.random.randn(16, latent_size)})
+        #print(samples.shape)
         #Z_test = sample_Z(16,10000)
         #Z_test = Z_train[0:16]
         #samples = sess.run(GLO_re, feed_dict={Z_one_hot: Z_test})
@@ -117,8 +132,8 @@ for it in range(100000):
         i += 1
         plt.close(fig)
 
-    X_, Z_ = mnist_next_batch(X_train, Z_train, 50)
-    G_loss = sess.run(train, feed_dict={X_in: X_, Z_one_hot: Z_})
+    X_, K_ = mnist_next_batch(X_train, Z_train, 50)
+    G_loss = sess.run(solver, feed_dict={x_: X_, k_: K_})
     if it % 1000 == 0:
         print('Iter: {}'.format(it))
 
