@@ -95,8 +95,6 @@ b_g2 = tf.Variable(tf.zeros(shape=[128]))
 W_g3 = tf.Variable(xavier_init([128,784]))
 b_g3 = tf.Variable(tf.zeros(shape=[784]))
 
-var_g = [W_g1, b_g1, W_g2, b_g2, W_g3, b_g3]
-
 #Model Implement
 def Generator(z):
     h_g1 = tf.nn.relu(tf.matmul(z, W_g1) + b_g1)
@@ -124,8 +122,8 @@ if not os.path.exists('out/'):
     os.makedirs('out/')
 
 i=0
-for it in range(100000):
-    #Optimize
+for it in range(50001):
+    #Train weight & latent
     x_batch, z_batch, id_batch = mnist_next_batch(x_train, z_train, batch_size)
     _, grad = sess.run([train, z_gradients], feed_dict={x_: x_batch, z_: z_batch})
     grad_np = np.asarray(grad[0])
@@ -135,11 +133,16 @@ for it in range(100000):
     if it % 100 == 0:
         loss_ = sess.run(loss, feed_dict={x_: x_batch, z_: z_batch})
         print('Iter: {}, loss: {}'.format(it, loss_))
-        z_samp = np.random.normal(0., 0.3, [16, latent_size])
-        samples_samp = sess.run(x_prob, feed_dict={z_: z_samp})
+        
+        #Reconstruct x test
         _, z_test, _ = mnist_next_batch(x_train, z_train, 16)
         samples_re = sess.run(x_prob, feed_dict={z_: z_test})
 
+        #Random sample z test
+        z_samp = np.random.normal(0., 0.3, [16, latent_size])
+        samples_samp = sess.run(x_prob, feed_dict={z_: z_samp})
+        
+        #Ouput figure
         plot_x(i,'recon', samples_re)
         plot_x(i,'samp', samples_samp)
         plot_z(z_train, 0, 1, i, z_samp)
