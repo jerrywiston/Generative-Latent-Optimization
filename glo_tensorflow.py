@@ -7,11 +7,6 @@ import os
 import random
 
 #================================= Unit Function =================================
-def xavier_init(size):
-    in_dim = size[0]
-    xavier_stddev = 1. / tf.sqrt(in_dim / 2.)
-    return tf.random_normal(shape=size, stddev=xavier_stddev)
-
 def plot(samples):
     fig = plt.figure(figsize=(4, 4))
     gs = gridspec.GridSpec(4, 4)
@@ -27,38 +22,6 @@ def plot(samples):
 
     return fig
 
-def mnist_next_batch(imgs, labels, size):
-    id_samp = np.ndarray(shape=(size), dtype=np.int32)
-    img_samp = np.ndarray(shape=(size, imgs.shape[1]))
-    label_samp = np.ndarray(shape=(size, labels.shape[1]))
-    for i in range(size):
-        r = random.randint(0,imgs.shape[0]-1)
-        img_samp[i] = imgs[r]
-        label_samp[i] = labels[r]
-        id_samp[i] = r
-    return [img_samp, label_samp, id_samp]
-
-def sample_z(m, n):
-    z = []
-    for i in range(m):
-        scale = random.uniform(0., 1.)
-        z_temp = np.random.uniform(-1., 1., size=[n])
-        z_temp /= np.sqrt(z_temp.dot(z_temp))
-        z_temp *= scale
-        z.append(z_temp.tolist())
-    return np.asarray(z)
-
-def latent_rescale(z):
-    length = np.sqrt(z.dot(z))
-    if length > 1.0:
-        z /= length
-    return z
-
-def train_latent(grad, id_list, z_train, rate):
-    for i in range(id_list.shape[0]):
-        z_update = z_train[id_list[i]] - rate * grad[i]
-        z_train[id_list[i]] = latent_rescale(z_update)
-    
 def plot_x(id, type, samp):
     fig = plot(samp)
     plt.savefig('out/{}_{}.png'.format(str(id).zfill(4), type), bbox_inches='tight')
@@ -82,11 +45,38 @@ def plot_z(z, dim1, dim2, id, samp):
     plt.savefig('out/{}_dist.png'.format(str(id).zfill(4)), bbox_inches='tight')
     plt.close(fig)
 
+def xavier_init(size):
+    in_dim = size[0]
+    xavier_stddev = 1. / tf.sqrt(in_dim / 2.)
+    return tf.random_normal(shape=size, stddev=xavier_stddev)
+
+def mnist_next_batch(imgs, labels, size):
+    id_samp = np.ndarray(shape=(size), dtype=np.int32)
+    img_samp = np.ndarray(shape=(size, imgs.shape[1]))
+    label_samp = np.ndarray(shape=(size, labels.shape[1]))
+    for i in range(size):
+        r = random.randint(0,imgs.shape[0]-1)
+        img_samp[i] = imgs[r]
+        label_samp[i] = labels[r]
+        id_samp[i] = r
+    return [img_samp, label_samp, id_samp]
+
+#================================= Latent Training Function =================================
+def latent_rescale(z):
+    length = np.sqrt(z.dot(z))
+    if length > 1.0:
+        z /= length
+    return z
+
+def train_latent(grad, id_list, z_train, rate):
+    for i in range(id_list.shape[0]):
+        z_update = z_train[id_list[i]] - rate * grad[i]
+        z_train[id_list[i]] = latent_rescale(z_update)
+    
 #================================= Data & Parameter =================================
 #Some parameter
 latent_size = 8
 batch_size = 256
-#samp_size = 10000
 
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 x_train = mnist.train.images
@@ -139,7 +129,6 @@ for it in range(100000):
     x_batch, z_batch, id_batch = mnist_next_batch(x_train, z_train, batch_size)
     _, grad = sess.run([train, z_gradients], feed_dict={x_: x_batch, z_: z_batch})
     grad_np = np.asarray(grad[0])
-    #print(grad_np)
     train_latent(grad_np, id_batch, z_train, 1.)
 
     #Print message
