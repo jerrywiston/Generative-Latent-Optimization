@@ -1,0 +1,2 @@
+1. 畫出VAE與GAN的維度 觀察點分佈情況
+2. 使用GAN學習Latent Vector
