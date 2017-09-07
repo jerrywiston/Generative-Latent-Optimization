@@ -75,7 +75,7 @@ def train_latent(grad, id_list, z_train, rate):
     
 #================================= Data & Parameter =================================
 #Some parameter
-latent_size = 8
+latent_size = 10
 batch_size = 256
 
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
@@ -110,8 +110,8 @@ loss = tf.reduce_mean(tf.reduce_sum(tf.square(x_prob - x_), reduction_indices=[1
 #loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logits, labels=x_))
 
 z_gradients = tf.gradients(loss, z_)
-train = tf.train.AdamOptimizer().minimize(loss)
-#train = tf.train.GradientDescentOptimizer(0.001).minimize(loss)
+solver = tf.train.AdamOptimizer().minimize(loss)
+#solver = tf.train.GradientDescentOptimizer(0.001).minimize(loss)
 
 #Build model
 sess = tf.Session()
@@ -125,7 +125,7 @@ i=0
 for it in range(50001):
     #Train weight & latent
     x_batch, z_batch, id_batch = mnist_next_batch(x_train, z_train, batch_size)
-    _, grad = sess.run([train, z_gradients], feed_dict={x_: x_batch, z_: z_batch})
+    _, grad = sess.run([solver, z_gradients], feed_dict={x_: x_batch, z_: z_batch})
     grad_np = np.asarray(grad[0])
     train_latent(grad_np, id_batch, z_train, 1.)
 
