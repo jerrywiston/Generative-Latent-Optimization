@@ -3,8 +3,9 @@ from tensorflow.examples.tutorials.mnist import input_data
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-import os
+import math
 import random
+import os
 
 #================================= Unit Function =================================
 def plot(samples):
@@ -47,9 +48,15 @@ def plot_z(z, dim1, dim2, id, samp):
 	plt.close(fig)
 
 def xavier_init(size):
-    in_dim = size[0]
-    xavier_stddev = 1. / tf.sqrt(in_dim / 2.)
-    return tf.random_normal(shape=size, stddev=xavier_stddev)
+    if len(size) == 4:
+        n_inputs = size[0]*size[1]*size[2]
+        n_outputs = size[3]
+    else:
+        n_inputs = size[0]
+        n_outputs = size[1]
+    
+    stddev = math.sqrt(3.0 / (n_inputs + n_outputs))
+    return tf.truncated_normal(size, stddev=stddev)
 
 def mnist_next_batch(imgs, labels, size):
     id_samp = np.ndarray(shape=(size), dtype=np.int32)
@@ -90,14 +97,22 @@ b_mu = tf.Variable(tf.zeros(shape=[repar_size]))
 W_sigma = tf.Variable(xavier_init([latent_size, repar_size]))
 b_sigma = tf.Variable(tf.zeros(shape=[repar_size]))
 
-W_g1 = tf.Variable(xavier_init([repar_size,32]))
-b_g1 = tf.Variable(tf.zeros(shape=[32]))
-W_g2 = tf.Variable(xavier_init([32,128]))
-b_g2 = tf.Variable(tf.zeros(shape=[128]))
-W_g3 = tf.Variable(xavier_init([128,784]))
-b_g3 = tf.Variable(tf.zeros(shape=[784]))
+W_g_fc1 = tf.Variable(xavier_init([repar_size,7*7*32]))
+b_g_fc1 = tf.Variable(tf.zeros(shape=[7*7*32]))
+
+W_g_conv2 = tf.Variable(xavier_init([5,5,16,32]))
+b_g_conv2 = tf.Variable(tf.zeros(shape=[16]))
+
+W_g_conv3 = tf.Variable(xavier_init([5,5,1,16]))
+b_g_conv3 = tf.Variable(tf.zeros(shape=[1]))
 
 #Model Implement
+def conv2d(x, W, stride):
+    return tf.nn.conv2d(x ,W ,strides=stride, padding='SAME')
+
+def deconv2d(x, W, output_shape, stride=[1,2,2,1]):
+    return tf.nn.conv2d_transpose(x, W, output_shape, strides=stride, padding='SAME')
+
 def Reparameter(k):
 	z_mu = tf.matmul(k, W_mu) + b_mu
 	z_logvar = tf.matmul(k, W_sigma) + b_sigma
@@ -108,16 +123,22 @@ def SampleZ(mu, log_var):
 	return mu + tf.exp(log_var / 2) * eps
 
 def Generator(z):
-    h_g1 = tf.nn.relu(tf.matmul(z, W_g1) + b_g1)
-    h_g2 = tf.nn.relu(tf.matmul(h_g1, W_g2) + b_g2)
-    x_re_logit = tf.matmul(h_g2, W_g3) + b_g3
-    x_re_prob = tf.nn.sigmoid(x_re_logit)
-    return x_re_logit, x_re_prob
+    h_g_fc1 = tf.nn.relu(tf.matmul(z, W_g_fc1) + b_g_fc1)
+    h_g_re1 = tf.reshape(h_g_fc1, [-1, 7, 7, 32])
+
+    output_shape_g2 = tf.stack([tf.shape(z)[0], 14, 14, 16])
+    h_g_conv2 = tf.nn.relu(deconv2d(h_g_re1, W_g_conv2, output_shape_g2) + b_g_conv2)
+
+    output_shape_g3 = tf.stack([tf.shape(z)[0], 28, 28, 1])
+    h_g_conv3 = tf.nn.relu(deconv2d(h_g_conv2, W_g_conv3, output_shape_g3) + b_g_conv3)
+
+    h_g_re3 = tf.reshape(h_g_conv3, [-1,784])
+    return h_g_re3
 
 z_mu, z_logvar = Reparameter(k_)
 z_sample = SampleZ(z_mu, z_logvar)
-x_logits, x_prob = Generator(z_sample)
-_, x_sample = Generator(z_)
+x_prob = Generator(z_sample)
+x_sample = Generator(z_)
 
 #Loss and optimizer
 #recon_loss = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=x_prob, labels=x_), 1)

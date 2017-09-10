@@ -3,8 +3,9 @@ from tensorflow.examples.tutorials.mnist import input_data
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-import os
+import math
 import random
+import os
 
 #================================= Unit Function =================================
 def plot(samples):
@@ -46,9 +47,15 @@ def plot_z(z, dim1, dim2, id, samp):
     plt.close(fig)
 
 def xavier_init(size):
-    in_dim = size[0]
-    xavier_stddev = 1. / tf.sqrt(in_dim / 2.)
-    return tf.random_normal(shape=size, stddev=xavier_stddev)
+    if len(size) == 4:
+        n_inputs = size[0]*size[1]*size[2]
+        n_outputs = size[3]
+    else:
+        n_inputs = size[0]
+        n_outputs = size[1]
+    
+    stddev = math.sqrt(3.0 / (n_inputs + n_outputs))
+    return tf.truncated_normal(size, stddev=stddev)
 
 def mnist_next_batch(imgs, labels, size):
     id_samp = np.ndarray(shape=(size), dtype=np.int32)
@@ -88,30 +95,41 @@ z_ = tf.placeholder(tf.float32, shape=[None, latent_size])
 x_ = tf.placeholder(tf.float32, shape=[None, 784])
 
 #Model Variable
-W_g1 = tf.Variable(xavier_init([latent_size,16]))
-b_g1 = tf.Variable(tf.zeros(shape=[16]))
-W_g2 = tf.Variable(xavier_init([16,128]))
-b_g2 = tf.Variable(tf.zeros(shape=[128]))
-W_g3 = tf.Variable(xavier_init([128,784]))
-b_g3 = tf.Variable(tf.zeros(shape=[784]))
+W_g_fc1 = tf.Variable(xavier_init([latent_size,7*7*32]))
+b_g_fc1 = tf.Variable(tf.zeros(shape=[7*7*32]))
+
+W_g_conv2 = tf.Variable(xavier_init([5,5,16,32]))
+b_g_conv2 = tf.Variable(tf.zeros(shape=[16]))
+
+W_g_conv3 = tf.Variable(xavier_init([5,5,1,16]))
+b_g_conv3 = tf.Variable(tf.zeros(shape=[1]))
 
 #Model Implement
-def Generator(z):
-    h_g1 = tf.nn.relu(tf.matmul(z, W_g1) + b_g1)
-    h_g2 = tf.nn.relu(tf.matmul(h_g1, W_g2) + b_g2)
-    x_re_logit = tf.matmul(h_g2, W_g3) + b_g3
-    x_re_prob = tf.nn.sigmoid(x_re_logit)
-    return x_re_logit, x_re_prob
+def conv2d(x, W, stride):
+    return tf.nn.conv2d(x ,W ,strides=stride, padding='SAME')
 
-x_logits, x_prob = Generator(z_)
+def deconv2d(x, W, output_shape, stride=[1,2,2,1]):
+    return tf.nn.conv2d_transpose(x, W, output_shape, strides=stride, padding='SAME')
+
+def Generator(z):
+    h_g_fc1 = tf.nn.relu(tf.matmul(z, W_g_fc1) + b_g_fc1)
+    h_g_re1 = tf.reshape(h_g_fc1, [-1, 7, 7, 32])
+
+    output_shape_g2 = tf.stack([tf.shape(z)[0], 14, 14, 16])
+    h_g_conv2 = tf.nn.relu(deconv2d(h_g_re1, W_g_conv2, output_shape_g2) + b_g_conv2)
+
+    output_shape_g3 = tf.stack([tf.shape(z)[0], 28, 28, 1])
+    h_g_conv3 = tf.nn.relu(deconv2d(h_g_conv2, W_g_conv3, output_shape_g3) + b_g_conv3)
+
+    h_g_re3 = tf.reshape(h_g_conv3, [-1,784])
+    return h_g_re3
+
+x_prob = Generator(z_)
 
 #Loss and optimizer
 loss = tf.reduce_mean(tf.reduce_sum(tf.square(x_prob - x_), reduction_indices=[1]))
-#loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logits, labels=x_))
-
 z_gradients = tf.gradients(loss, z_)
 solver = tf.train.AdamOptimizer().minimize(loss)
-#solver = tf.train.GradientDescentOptimizer(0.001).minimize(loss)
 
 #Build model
 sess = tf.Session()

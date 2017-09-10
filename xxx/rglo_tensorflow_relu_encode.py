@@ -63,9 +63,17 @@ def mnist_next_batch(imgs, labels, size):
     return [img_samp, label_samp, id_samp]
 
 #================================= Latent Training Function =================================
+def latent_rescale(z):
+    length = np.sqrt(z.dot(z))
+    if length > 1.0:
+        z /= length
+    return z
+
 def train_latent(grad, id_list, z_train, rate):
     for i in range(id_list.shape[0]):
-        z_train[id_list[i]] -= rate * grad[i]
+        z_update = z_train[id_list[i]] - rate * grad[i]
+        #z_train[id_list[i]] = latent_rescale(z_update)
+        z_train[id_list[i]] = z_update
 
 #================================= Data & Parameter =================================
 #Some parameter
@@ -74,9 +82,8 @@ repar_size = 100
 batch_size = 256
 
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-x_train = mnist.train.images
-#std = 1. / tf.sqrt(x_train.shape[0] / 2.)
-k_train = np.random.normal(0., 0.001, [x_train.shape[0], latent_size])
+x_train = mnist.train.images[0:10000]
+k_train = np.random.normal(0., 0.01, [x_train.shape[0], latent_size])
 
 #================================= Network model =================================
 #Placeholder
@@ -85,9 +92,11 @@ z_ = tf.placeholder(tf.float32, shape=[None, repar_size])
 x_ = tf.placeholder(tf.float32, shape=[None, 784])
 
 #Model Variable
-W_mu = tf.Variable(xavier_init([latent_size, repar_size]))
+W_r1 = tf.Variable(xavier_init([latent_size, 128]))
+b_r1 = tf.Variable(tf.zeros(shape=[128]))
+W_mu = tf.Variable(xavier_init([128, repar_size]))
 b_mu = tf.Variable(tf.zeros(shape=[repar_size]))
-W_sigma = tf.Variable(xavier_init([latent_size, repar_size]))
+W_sigma = tf.Variable(xavier_init([128, repar_size]))
 b_sigma = tf.Variable(tf.zeros(shape=[repar_size]))
 
 W_g1 = tf.Variable(xavier_init([repar_size,32]))
@@ -99,8 +108,9 @@ b_g3 = tf.Variable(tf.zeros(shape=[784]))
 
 #Model Implement
 def Reparameter(k):
-	z_mu = tf.matmul(k, W_mu) + b_mu
-	z_logvar = tf.matmul(k, W_sigma) + b_sigma
+	h_r1 = tf.nn.relu(tf.matmul(k, W_r1) + b_r1)
+	z_mu = tf.matmul(h_r1, W_mu) + b_mu
+	z_logvar = tf.matmul(h_r1, W_sigma) + b_sigma
 	return z_mu, z_logvar
 
 def SampleZ(mu, log_var):
@@ -137,12 +147,12 @@ if not os.path.exists('out/'):
     os.makedirs('out/')
 
 i=0
-for it in range(20001):
+for it in range(50001):
     #Train weight & latent
     x_batch, k_batch, id_batch = mnist_next_batch(x_train, k_train, batch_size)
     _, grad = sess.run([solver, z_gradients], feed_dict={x_: x_batch, k_: k_batch})
     grad_np = np.asarray(grad[0])
-    train_latent(grad_np, id_batch, k_train, 1.)
+    train_latent(grad_np, id_batch, k_train, 0.1)
 
     #Print message
     if it % 100 == 0:
@@ -163,9 +173,3 @@ for it in range(20001):
         z_plot = sess.run(z_sample, feed_dict={k_: k_train[0:1000]})
         plot_z(z_plot, 0, 1, i, z_samp)
         i += 1
-
-#mu_look, sigma_look = sess.run([z_mu, z_logvar], feed_dict={k_: k_train[0:20]})
-#print(mu_look)
-#print(sigma_look)
-#print(k_train)
-
