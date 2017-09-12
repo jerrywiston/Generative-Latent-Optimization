@@ -40,8 +40,8 @@ def plot_z(z, dim1, dim2, id, samp):
 	ax.plot(x,y,'b.')
 	ax.plot(samp[:,dim1], samp[:,dim2], 'ro')
 
-	an = np.linspace(0, 2*np.pi, 100)
-	ax.plot(np.cos(an), np.sin(an), 'r')
+	#an = np.linspace(0, 2*np.pi, 100)
+	#ax.plot(np.cos(an), np.sin(an), 'r')
 
 	plt.savefig('out/{}_dist.png'.format(str(id).zfill(4)), bbox_inches='tight')
 	plt.close(fig)
@@ -73,6 +73,7 @@ latent_size = 256
 repar_size = 100
 batch_size = 256
 
+#mnist = input_data.read_data_sets('MNIST_fashion', one_hot=True)
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 x_train = mnist.train.images
 #std = 1. / tf.sqrt(x_train.shape[0] / 2.)

@@ -68,6 +68,25 @@ def mnist_next_batch(imgs, labels, size):
         id_samp[i] = r
     return [img_samp, label_samp, id_samp]
 
+#================================= Cifar Handling =================================
+def cifar_read(file):
+    import pickle
+    with open(file, 'rb') as fo:
+        dict = pinckle = pickle.load(fo, encoding='bytes')
+    return dict
+
+def cifar_data_extract(dict):
+    imgs = dict[b'data'].reshape(10000,3,32,32).transpose(0,2,3,1).astype("uint8")
+    print(imgs.shape)
+    return imgs
+
+def cifar_next_batch(imgs, size):
+    samp = np.ndarray(shape=(size, 32, 32 ,3), dtype="uint8")
+    for i in range(size):
+        rand_num = random.randint(0,len(imgs)-1)
+        samp[i] = imgs[rand_num]
+    return samp
+
 #================================= Latent Training Function =================================
 def latent_rescale(z):
     length = np.sqrt(z.dot(z))
@@ -82,22 +101,24 @@ def train_latent(grad, id_list, z_train, rate):
     
 #================================= Data & Parameter =================================
 #Some parameter
-latent_size = 8
+latent_size = 16
 batch_size = 256
 
-#mnist = input_data.read_data_sets('MNIST_fashion', one_hot=True)
-mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-x_train = mnist.train.images
+#mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+#x_train = mnist.train.images
+
+dict = cifar_read("cifar-10-batches-py/data_batch_1")
+x_train = cifar_data_extract(dict)
 z_train = np.random.normal(0., 0.5, [x_train.shape[0], latent_size])
 
 #================================= Network model =================================
 #Placeholder
 z_ = tf.placeholder(tf.float32, shape=[None, latent_size])
-x_ = tf.placeholder(tf.float32, shape=[None, 784])
+x_ = tf.placeholder(tf.float32, shape=[None, 32, 32, 3])
 
 #Model Variable
-W_g_fc1 = tf.Variable(xavier_init([latent_size,7*7*32]))
-b_g_fc1 = tf.Variable(tf.zeros(shape=[7*7*32]))
+W_g_fc1 = tf.Variable(xavier_init([latent_size,8*8*32]))
+b_g_fc1 = tf.Variable(tf.zeros(shape=[8*8*32]))
 
 W_g_conv2 = tf.Variable(xavier_init([5,5,16,32]))
 b_g_conv2 = tf.Variable(tf.zeros(shape=[16]))
@@ -114,16 +135,15 @@ def deconv2d(x, W, output_shape, stride=[1,2,2,1]):
 
 def Generator(z):
     h_g_fc1 = tf.nn.relu(tf.matmul(z, W_g_fc1) + b_g_fc1)
-    h_g_re1 = tf.reshape(h_g_fc1, [-1, 7, 7, 32])
+    h_g_re1 = tf.reshape(h_g_fc1, [-1, 8, 8, 32])
 
-    output_shape_g2 = tf.stack([tf.shape(z)[0], 14, 14, 16])
+    output_shape_g2 = tf.stack([tf.shape(z)[0], 16, 16, 16])
     h_g_conv2 = tf.nn.relu(deconv2d(h_g_re1, W_g_conv2, output_shape_g2) + b_g_conv2)
 
-    output_shape_g3 = tf.stack([tf.shape(z)[0], 28, 28, 1])
+    output_shape_g3 = tf.stack([tf.shape(z)[0], 32, 32, 3])
     h_g_conv3 = tf.nn.relu(deconv2d(h_g_conv2, W_g_conv3, output_shape_g3) + b_g_conv3)
 
-    h_g_re3 = tf.reshape(h_g_conv3, [-1,784])
-    return h_g_re3
+    return h_g_conv3
 
 x_prob = Generator(z_)
 
@@ -154,7 +174,7 @@ for it in range(20001):
         print('Iter: {}, loss: {}'.format(it, loss_))
         
         #Reconstruct x test
-        _, z_test, _ = mnist_next_batch(x_train, z_train, 16)
+        _, z_test, _ = cifar_next_batch(x_train, z_train, 16)
         samples_re = sess.run(x_prob, feed_dict={z_: z_test})
 
         #Random sample z test
