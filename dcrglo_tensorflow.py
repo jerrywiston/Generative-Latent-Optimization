@@ -80,8 +80,8 @@ latent_size = 256
 repar_size = 128
 batch_size = 256
 
-#mnist = input_data.read_data_sets('MNIST_fashion', one_hot=True)
-mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+mnist = input_data.read_data_sets('MNIST_fashion', one_hot=True)
+#mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 x_train = mnist.train.images
 #std = 1. / tf.sqrt(x_train.shape[0] / 2.)
 k_train = np.random.normal(0., 0.001, [x_train.shape[0], latent_size])

@@ -19,7 +19,7 @@ def plot(samples):
         ax.set_xticklabels([])
         ax.set_yticklabels([])
         ax.set_aspect('equal')
-        plt.imshow(sample.reshape(28, 28), cmap='Greys_r')
+        plt.imshow(sample.reshape(32,32,3))
 
     return fig
 
@@ -55,6 +55,7 @@ def xavier_init(size):
         n_outputs = size[1]
     
     stddev = math.sqrt(3.0 / (n_inputs + n_outputs))
+    stddev = 0.002
     return tf.truncated_normal(size, stddev=stddev)
 
 def mnist_next_batch(imgs, labels, size):
@@ -76,16 +77,22 @@ def cifar_read(file):
     return dict
 
 def cifar_data_extract(dict):
-    imgs = dict[b'data'].reshape(10000,3,32,32).transpose(0,2,3,1).astype("uint8")
+    imgs_raw = dict[b'data'].astype("uint8")
+    imgs = np.array(imgs_raw, dtype=float) / 255.0   
+    imgs = imgs.reshape([-1, 3, 32, 32]).transpose([0, 2, 3, 1])
     print(imgs.shape)
     return imgs
 
-def cifar_next_batch(imgs, size):
-    samp = np.ndarray(shape=(size, 32, 32 ,3), dtype="uint8")
+def cifar_next_batch(imgs, labels, size):
+    id_samp = np.ndarray(shape=(size), dtype=np.int32)
+    img_samp = np.ndarray(shape=(size, 32, 32 ,3))
+    label_samp = np.ndarray(shape=(size, labels.shape[1]))
     for i in range(size):
-        rand_num = random.randint(0,len(imgs)-1)
-        samp[i] = imgs[rand_num]
-    return samp
+        r = random.randint(0,len(imgs)-1)
+        img_samp[i] = imgs[r]
+        label_samp[i] = labels[r]
+        id_samp[i] = r
+    return [img_samp, label_samp, id_samp]
 
 #================================= Latent Training Function =================================
 def latent_rescale(z):
@@ -101,11 +108,8 @@ def train_latent(grad, id_list, z_train, rate):
     
 #================================= Data & Parameter =================================
 #Some parameter
-latent_size = 16
+latent_size = 64
 batch_size = 256
-
-#mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-#x_train = mnist.train.images
 
 dict = cifar_read("cifar-10-batches-py/data_batch_1")
 x_train = cifar_data_extract(dict)
@@ -117,33 +121,53 @@ z_ = tf.placeholder(tf.float32, shape=[None, latent_size])
 x_ = tf.placeholder(tf.float32, shape=[None, 32, 32, 3])
 
 #Model Variable
-W_g_fc1 = tf.Variable(xavier_init([latent_size,8*8*32]))
-b_g_fc1 = tf.Variable(tf.zeros(shape=[8*8*32]))
+W_g_conv1 = tf.Variable(xavier_init([4,4,384,latent_size]))
+b_g_conv1 = tf.Variable(tf.zeros(shape=[384]))
 
-W_g_conv2 = tf.Variable(xavier_init([5,5,16,32]))
-b_g_conv2 = tf.Variable(tf.zeros(shape=[16]))
+W_g_conv2 = tf.Variable(xavier_init([4,4,128,384]))
+b_g_conv2 = tf.Variable(tf.zeros(shape=[128]))
 
-W_g_conv3 = tf.Variable(xavier_init([5,5,1,16]))
-b_g_conv3 = tf.Variable(tf.zeros(shape=[1]))
+W_g_conv3 = tf.Variable(xavier_init([4,4,64,128]))
+b_g_conv3 = tf.Variable(tf.zeros(shape=[64]))
+
+W_g_conv4 = tf.Variable(xavier_init([4,4,16,64]))
+b_g_conv4 = tf.Variable(tf.zeros(shape=[16]))
+
+W_g_conv5 = tf.Variable(xavier_init([4,4,3,16]))
+b_g_conv5 = tf.Variable(tf.zeros(shape=[3]))
 
 #Model Implement
-def conv2d(x, W, stride):
+def conv2d(x, W, stride=[1,1,1,1]):
     return tf.nn.conv2d(x ,W ,strides=stride, padding='SAME')
 
-def deconv2d(x, W, output_shape, stride=[1,2,2,1]):
+def deconv2d(x, W, output_shape, stride=[1, 2, 2, 1]):
     return tf.nn.conv2d_transpose(x, W, output_shape, strides=stride, padding='SAME')
 
+def bi_deconv2d(x, W, stride=[1, 2, 2, 1]):
+    s1 = tf.shape(x)[1] * stride[1]
+    s2 = tf.shape(x)[2] * stride[2]
+    x_up = tf.image.resize_bilinear(x, [s1, s2])
+    return conv2d(x_up, W)
+
 def Generator(z):
-    h_g_fc1 = tf.nn.relu(tf.matmul(z, W_g_fc1) + b_g_fc1)
-    h_g_re1 = tf.reshape(h_g_fc1, [-1, 8, 8, 32])
+    z_re = tf.reshape(z, [-1, 1, 1, tf.shape(z)[1]])
 
-    output_shape_g2 = tf.stack([tf.shape(z)[0], 16, 16, 16])
-    h_g_conv2 = tf.nn.relu(deconv2d(h_g_re1, W_g_conv2, output_shape_g2) + b_g_conv2)
+    output_shape_g1 = tf.stack([tf.shape(z)[0], 2, 2, 384])
+    h_g_conv1 = tf.nn.relu(deconv2d(z_re, W_g_conv1, output_shape_g1) + b_g_conv1)
+    
+    output_shape_g2 = tf.stack([tf.shape(z)[0], 4, 4, 128])
+    h_g_conv2 = tf.nn.relu(deconv2d(h_g_conv1, W_g_conv2, output_shape_g2) + b_g_conv2)
 
-    output_shape_g3 = tf.stack([tf.shape(z)[0], 32, 32, 3])
+    output_shape_g3 = tf.stack([tf.shape(z)[0], 8, 8, 64])
     h_g_conv3 = tf.nn.relu(deconv2d(h_g_conv2, W_g_conv3, output_shape_g3) + b_g_conv3)
 
-    return h_g_conv3
+    output_shape_g4 = tf.stack([tf.shape(z)[0], 16, 16, 16])
+    h_g_conv4 = tf.nn.relu(deconv2d(h_g_conv3, W_g_conv4, output_shape_g4) + b_g_conv4)
+
+    output_shape_g5 = tf.stack([tf.shape(z)[0], 32, 32, 3])
+    h_g_conv5 = tf.nn.sigmoid(deconv2d(h_g_conv4, W_g_conv5, output_shape_g5) + b_g_conv5)
+
+    return h_g_conv5
 
 x_prob = Generator(z_)
 
@@ -161,9 +185,9 @@ if not os.path.exists('out/'):
     os.makedirs('out/')
 
 i=0
-for it in range(20001):
+for it in range(50001):
     #Train weight & latent
-    x_batch, z_batch, id_batch = mnist_next_batch(x_train, z_train, batch_size)
+    x_batch, z_batch, id_batch = cifar_next_batch(x_train, z_train, batch_size)
     _, grad = sess.run([solver, z_gradients], feed_dict={x_: x_batch, z_: z_batch})
     grad_np = np.asarray(grad[0])
     train_latent(grad_np, id_batch, z_train, 1.)
@@ -178,7 +202,7 @@ for it in range(20001):
         samples_re = sess.run(x_prob, feed_dict={z_: z_test})
 
         #Random sample z test
-        z_samp = np.random.normal(0., 0.3, [16, latent_size])
+        z_samp = np.random.normal(0., 0.1, [16, latent_size])
         samples_samp = sess.run(x_prob, feed_dict={z_: z_samp})
         
         #Ouput figure

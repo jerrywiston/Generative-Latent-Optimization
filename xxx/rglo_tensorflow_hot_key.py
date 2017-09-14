@@ -48,7 +48,7 @@ def sample_Z(m, n):
     return np.asarray(z)
 
 #Read file and make training set
-mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+mnist = input_data.read_data_sets('MNIST_fashion', one_hot=True)
 X_train = mnist.train.images[0:10000]
 Z_train = np.identity(X_train.shape[0])
 
@@ -63,14 +63,10 @@ z_ = tf.placeholder(tf.float32, shape=[None, latent_size])
 x_ = tf.placeholder(tf.float32, shape=[None,784])
 
 #Model Variable
-W_e1 = tf.Variable(xavier_init([samp_size, 256]))
-b_e1 = tf.Variable(tf.zeros(shape=[256]))
-W_e2 = tf.Variable(xavier_init([256, 128]))
-b_e2 = tf.Variable(tf.zeros(shape=[128]))
-W_e3_mu = tf.Variable(xavier_init([128, latent_size]))
-b_e3_mu = tf.Variable(tf.zeros(shape=[latent_size]))
-W_e3_sigma = tf.Variable(xavier_init([128, latent_size]))
-b_e3_sigma = tf.Variable(tf.zeros(shape=[latent_size]))
+W_mu = tf.Variable(xavier_init([samp_size, latent_size]))
+b_mu = tf.Variable(tf.zeros(shape=[latent_size]))
+W_sigma = tf.Variable(xavier_init([samp_size, latent_size]))
+b_sigma = tf.Variable(tf.zeros(shape=[latent_size]))
 
 W_g1 = tf.Variable(xavier_init([latent_size,10]))
 b_g1 = tf.Variable(tf.zeros(shape=[10]))
@@ -81,10 +77,8 @@ b_g3 = tf.Variable(tf.zeros(shape=[784]))
 
 #Model Implement
 def OneHotEncoder(k):
-    h_e1 = tf.nn.relu(tf.matmul(k, W_e1) + b_e1)
-    h_e2 = tf.nn.relu(tf.matmul(h_e1, W_e2) + b_e2)
-    z_mu = tf.matmul(h_e2, W_e3_mu) + b_e3_mu
-    z_logvar = tf.matmul(h_e2, W_e3_sigma) + b_e3_sigma
+    z_mu = tf.matmul(k, W_mu) + b_mu
+    z_logvar = tf.matmul(k, W_sigma) + b_sigma
     return z_mu, z_logvar
 
 def Generator(z):

@@ -81,7 +81,7 @@ def train_latent(mu_grad, sigma_grad, id_list, z_mu_train, z_sigma_train, rate):
 latent_size = 100
 batch_size = 256
 
-mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+mnist = input_data.read_data_sets('MNIST_fashion', one_hot=True)
 x_train = mnist.train.images
 z_mu_train = np.random.normal(0., 0.001, [x_train.shape[0], latent_size])
 z_sigma_train = np.random.normal(0., 0.001, [x_train.shape[0], latent_size])
@@ -125,7 +125,7 @@ loss = tf.reduce_mean(recon_loss + kl_loss)
 
 z_mu_grad = tf.gradients(loss, z_mu_)
 z_sigma_grad = tf.gradients(loss, z_sigma_)
-solver = tf.train.AdamOptimizer(0.0001).minimize(loss)
+solver = tf.train.AdamOptimizer().minimize(loss)
 
 #Build model
 sess = tf.Session()
@@ -143,7 +143,7 @@ for it in range(50001):
                             feed_dict = {x_: x_batch, z_mu_: z_mu_batch, z_sigma_: z_sigma_batch})
     mu_grad_np = np.asarray(mu_grad[0])
     sigma_grad_np = np.asarray(sigma_grad[0])
-    train_latent(mu_grad_np, sigma_grad_np, id_batch, z_mu_train, z_sigma_train, 1.)
+    train_latent(mu_grad_np, sigma_grad_np, id_batch, z_mu_train, z_sigma_train, 0.001)
 
     #Print message
     if it % 100 == 0:

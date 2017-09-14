@@ -78,8 +78,8 @@ def train_latent(grad, id_list, z_train, rate):
 latent_size = 8
 batch_size = 256
 
-#mnist = input_data.read_data_sets('MNIST_fashion', one_hot=True)
-mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+mnist = input_data.read_data_sets('MNIST_fashion', one_hot=True)
+#mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 x_train = mnist.train.images
 z_train = np.random.normal(0., 0.5, [x_train.shape[0], latent_size])
 
